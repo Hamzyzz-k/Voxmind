@@ -1,7 +1,6 @@
 import { useState } from "react"
 import axios from "axios"
-
-const API = "http://127.0.0.1:3500"
+import API from "../config"
 
 export default function Login({ onLogin }) {
   const [mode, setMode] = useState("login")

@@ -2,8 +2,7 @@ import { useState, useRef } from "react"
 import axios from "axios"
 import Login from "./components/Login"
 import SmartHome from "./components/SmartHome"
-
-const API = "http://127.0.0.1:3500"
+import API from "./config"
 
 export default function App() {
   const [user, setUser] = useState(null)
