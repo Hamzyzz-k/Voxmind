@@ -1,6 +1,9 @@
 import requests
+import os
+import json
 from ddgs import DDGS
 from datetime import datetime
+from groq import Groq
 
 LANG_MAP = {
     "hi": "Hindi",
@@ -10,6 +13,24 @@ LANG_MAP = {
     "en": "English",
     "kn": "Kannada"
 }
+
+MEMORY_FILE = "voice_profiles/user_memory.json"
+
+def load_memory(username: str) -> str:
+    if not os.path.exists(MEMORY_FILE):
+        return ""
+    with open(MEMORY_FILE, "r") as f:
+        data = json.load(f)
+    return data.get(username, "")
+
+def save_memory(username: str, note: str):
+    data = {}
+    if os.path.exists(MEMORY_FILE):
+        with open(MEMORY_FILE, "r") as f:
+            data = json.load(f)
+    data[username] = note
+    with open(MEMORY_FILE, "w") as f:
+        json.dump(data, f)
 
 def search_web(query: str) -> str:
     try:
@@ -22,10 +43,11 @@ def search_web(query: str) -> str:
 
 def needs_search(question: str) -> bool:
     keywords = ["today", "current", "latest", "now", "recent",
-                "news", "price", "weather", "score", "date", 
-                "2024", "2025", "2026", "who is", "when did", 
+                "news", "price", "weather", "score", "date",
+                "2024", "2025", "2026", "who is", "when did",
                 "happened", "result"]
     return any(k in question.lower() for k in keywords)
+
 def ask_claude(question: str, language: str, username: str = "") -> str:
     lang_name = LANG_MAP.get(language, "English")
 
@@ -47,7 +69,7 @@ def ask_claude(question: str, language: str, username: str = "") -> str:
 
     prompt = f"{lang_hint} {context}\nAnswer this question: {question}".strip()
 
-    # Try Ollama first (works locally)
+    # Try Ollama first (local)
     try:
         response = requests.post(
             "http://localhost:11434/api/generate",
@@ -59,40 +81,13 @@ def ask_claude(question: str, language: str, username: str = "") -> str:
     except:
         pass
 
-    # Fallback to HuggingFace (works on cloud)
+    # Fallback to Groq (cloud - free)
     try:
-        HF_TOKEN = os.getenv("HF_TOKEN", "")
-        hf_response = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
-            headers={"Authorization": f"Bearer {HF_TOKEN}"},
-            json={"inputs": prompt, "parameters": {"max_new_tokens": 500}},
-            timeout=30
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        chat = client.chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama3-8b-8192",
         )
-        result = hf_response.json()
-        if isinstance(result, list):
-            return result[0]["generated_text"]
-    except:
-        pass
-
-    raise Exception("Both Ollama and HuggingFace failed to respond.")
-       
-import json
-import os
-
-MEMORY_FILE = "voice_profiles/user_memory.json"
-
-def load_memory(username: str) -> str:
-    if not os.path.exists(MEMORY_FILE):
-        return ""
-    with open(MEMORY_FILE, "r") as f:
-        data = json.load(f)
-    return data.get(username, "")
-
-def save_memory(username: str, note: str):
-    data = {}
-    if os.path.exists(MEMORY_FILE):
-        with open(MEMORY_FILE, "r") as f:
-            data = json.load(f)
-    data[username] = note
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(data, f)
+        return chat.choices[0].message.content
+    except Exception as e:
+        raise Exception(f"Both Ollama and Groq failed: {str(e)}")
